@@ -1,0 +1,53 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider      = "prisma-client-js"
+    binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+    id        String  @id @default(uuid())
+    userId    String  @unique
+    password  String
+    firstName String
+    lastName  String
+    balances  Json?   @default("{ \"usd\": { \"qty\": 5000 } }")
+    orders    Order[]
+}
+
+model Candle {
+    timestamp DateTime @unique @db.Timestamptz(6)
+    open      Float
+    high      Float
+    low       Float
+    close     Float
+    assetName String
+    // Additional columns for charting (optional but helpful)
+    color     String?
+    label     String?
+
+    @@index([timestamp, assetName])
+    @@map("candles")
+}
+
+model Order {
+    id         String    @id @default(uuid())
+    userId     String
+    asset      String
+    qty        Float
+    type       String // "buy" or "sell"
+    status     String // "open" or "closed"
+    openPrice  Float
+    closePrice Float?
+    stopLoss   Float?
+    takeProfit Float?
+    createdAt  DateTime  @default(now())
+    closedAt   DateTime?
+    user       User      @relation(fields: [userId], references: [id])
+}
