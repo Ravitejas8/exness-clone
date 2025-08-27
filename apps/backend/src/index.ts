@@ -3,14 +3,33 @@ import type { Express, Request, Response } from 'express';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import cors from 'cors';
 import { z } from 'zod';
-
-import { db } from "@project1/db"; // <-- Corrected import
+import { Redis } from "ioredis";
+import { db } from "@project1/db";
 
 const app: Express = express();
 app.use(express.json());
 app.use(cors());
 
-// Schemas for request validation
+const REDIS_URL = 'redis://127.0.0.1:6379';
+const redisSubscriber = new Redis(REDIS_URL)
+redisSubscriber.subscribe('sol-price')
+
+redisSubscriber.on('ready', () => {
+    console.log('Successfully connected to Redis.');
+});
+
+redisSubscriber.on('error', (err) => {
+    console.error('Redis connection error:', err);
+});
+
+let currentSolPrice: number | null = null
+redisSubscriber.on('message', (channel, message) => {
+    if (channel == "sol-price") {
+        const data = JSON.parse(message)
+        currentSolPrice = data.price
+        console.log(`Received new SOL price: ${currentSolPrice}`);
+    }
+})
 const signUpSchema = z.object({
     userId: z.string().min(3, "User ID must be at least 3 characters long."),
     password: z.string().min(6, "Password must be at least 6 characters long."),
@@ -88,28 +107,35 @@ app.post("/signin", async (req: Request, res: Response) => {
     }
 });
 
-app.get("/candles", async (req: Request, res: Response) => {
-    const { asset, duration, startTime, endTime } = req.query;
+app.get("/candles", async (req, res) => {
+    // Re-added 'asset' to be read from the query parameters
+    const { asset, interval, startTime, endTime } = req.query;
 
-    // Validate query parameters
-    if (!asset || !duration) {
-        return res.status(400).json({ message: "Asset and duration are required." });
+    // Validation now checks for 'asset' again
+    if (!asset || !interval) {
+        return res.status(400).json({ message: "Asset and interval are required." });
     }
 
-    const candles = await db.candle.findMany({ // <-- Corrected call
-        where: {
-            assetName: String(asset),
-            timestamp: {
-                gte: startTime ? new Date(String(startTime)) : undefined,
-                lte: endTime ? new Date(String(endTime)) : undefined,
+    try {
+        const candles = await db.candle.findMany({
+            where: {
+                // Uses the provided 'asset' from the query
+                assetName: String(asset),
+                interval: String(interval),
+                timestamp: {
+                    gte: startTime ? new Date(String(startTime)) : undefined,
+                    lte: endTime ? new Date(String(endTime)) : undefined,
+                },
             },
-        },
-        orderBy: {
-            timestamp: 'asc',
-        }
-    });
-
-    return res.status(200).json(candles);
+            orderBy: {
+                timestamp: 'asc',
+            }
+        });
+        return res.status(200).json(candles);
+    } catch (error) {
+        console.error("API Error fetching candles:", error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
 });
 
 app.get("/balance", authenticateUser, async (req: Request, res: Response) => {
@@ -195,12 +221,19 @@ app.post("/order/close", authenticateUser, async (req: Request, res: Response) =
 app.get("/orders", authenticateUser, async (req: Request, res: Response) => {
     const user = (req as any).user;
 
-    const orders = await db.order.findMany({ // <-- Corrected call
+    const orders = await db.order.findMany({
         where: { userId: user.id },
         select: { asset: true, qty: true, type: true, status: true, openPrice: true, closedAt: true, closePrice: true }
     });
 
     return res.status(200).json(orders);
+});
+
+app.get('/price', (req: Request, res: Response) => {
+    if (currentSolPrice !== null) {
+        return res.status(200).json({ asset: 'solana', price: currentSolPrice });
+    }
+    return res.status(503).json({ message: 'Price feed not available yet.' });
 });
 
 const port = process.env.PORT || 3000;
