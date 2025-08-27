@@ -28,10 +28,11 @@ model Candle {
     low       Float
     close     Float
     assetName String
-    // Additional columns for charting (optional but helpful)
     color     String?
     label     String?
+    interval  String
 
+    @@unique([timestamp, assetName, interval])
     @@index([timestamp, assetName])
     @@map("candles")
 }
