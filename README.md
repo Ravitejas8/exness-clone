@@ -1,6 +1,7 @@
 Backend systems Architecture:
 
-<img width="1920" height="1080" alt="Screenshot from 2025-09-01 10-56-40" src="https://github.com/user-attachments/assets/1e98cae1-5e66-451e-86ba-b92097437144" />
+<img width="1920" height="1080" alt="Screenshot from 2025-09-01 11-16-35" src="https://github.com/user-attachments/assets/143c85d2-c529-475b-a8bf-6d608aca5ebc" />
+
 
 Preview:
 
